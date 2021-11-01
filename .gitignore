@@ -22,3 +22,4 @@ FrontEnd/uber2-frontend.env.production.local
 FrontEnd/uber2-frontendnpm-debug.log*
 FrontEnd/uber2-frontendyarn-debug.log*
 FrontEnd/uber2-frontendyarn-error.log*
+.idea/

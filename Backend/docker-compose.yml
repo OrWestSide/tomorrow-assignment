@@ -41,6 +41,6 @@ services:
 
   upgrade:
     image: tiangolo/uvicorn-gunicorn-fastapi:python3.8
-    command: bash -c "pip install -i https://gitlab-runner:AP2bGdYxE44HuBLmpGHwTCxiY1vN5Pcq9ZbG9A@hapimag.jfrog.io/artifactory/api/pypi/pipy-proxy/simple --upgrade -r /opt/project/requirements/requirements.txt && pip freeze > /opt/project/requirements-freezed.txt"
+    command: bash -c "pip install --upgrade -r /opt/project/requirements/requirements.txt && pip freeze > /opt/project/requirements-freezed.txt"
     volumes:
       - .:/opt/project
