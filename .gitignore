@@ -1,0 +1,24 @@
+TomorrowChallengeReport.odt
+TomorrowChallengeReport.pdf
+
+# dependencies
+FrontEnd/uber2-frontend/node_modules
+FrontEnd/uber2-frontend/.pnp
+FrontEnd/uber2-frontend.pnp.js
+
+# testing
+FrontEnd/uber2-frontend/coverage
+
+# production
+FrontEnd/uber2-frontend/build
+
+# misc
+FrontEnd/uber2-frontend.DS_Store
+FrontEnd/uber2-frontend.env.local
+FrontEnd/uber2-frontend.env.development.local
+FrontEnd/uber2-frontend.env.test.local
+FrontEnd/uber2-frontend.env.production.local
+
+FrontEnd/uber2-frontendnpm-debug.log*
+FrontEnd/uber2-frontendyarn-debug.log*
+FrontEnd/uber2-frontendyarn-error.log*

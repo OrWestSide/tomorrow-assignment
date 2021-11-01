@@ -1,0 +1,136 @@
+variables:
+  CONTAINER_WIP_IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+  CONTAINER_IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+  CONTAINER_IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
+  SIHOT_URL_DEV: 'https://sihot-proxy.minikube/intr/INTRService?wsdl'
+
+stages:
+  - build
+  - quality
+  - release
+  - deploy-to-dev
+  - deploy-to-stage
+  - deploy-to-production
+
+push-to-registry:
+  stage: build
+  image: docker:19.03.0
+  services:
+    - docker:19.03.0-dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - CONTAINER_IMAGE_NAME=$(if [[ $CI_COMMIT_REF_NAME == "master" ]]; then echo $CONTAINER_IMAGE;else echo $CONTAINER_WIP_IMAGE;fi)
+    - docker build --pull -t $CONTAINER_IMAGE_NAME .
+    - docker push $CONTAINER_IMAGE_NAME
+  except:
+    - tags
+
+push-to-registry-tags:
+  image: docker:19.03.0
+  services:
+    - docker:19.03.0-dind
+  stage: release
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker pull $CONTAINER_IMAGE
+    - docker tag $CONTAINER_IMAGE $CONTAINER_IMAGE_TAG
+    - docker push $CONTAINER_IMAGE_TAG
+  only:
+    - tags
+
+quality:check-pep8:
+  stage: quality
+  image: docker:19.03.0
+  services:
+    - docker:19.03.0-dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - CONTAINER_IMAGE_NAME=$(if [[ $CI_COMMIT_REF_NAME == "master" ]]; then echo $CONTAINER_IMAGE;else echo $CONTAINER_WIP_IMAGE;fi)
+    - docker run $CONTAINER_IMAGE_NAME bash -c 'flake8'
+  except:
+    - tags
+
+quality:unit-tests:
+  stage: quality
+  image: docker:19.03.0
+  services:
+    - docker:19.03.0-dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - CONTAINER_IMAGE_NAME=$(if [[ $CI_COMMIT_REF_NAME == "master" ]]; then echo $CONTAINER_IMAGE;else echo $CONTAINER_WIP_IMAGE;fi)
+    - docker run --env-file ./.local_dev.test.env $CONTAINER_IMAGE_NAME bash -c 'coverage run -m --source=app pytest -v tests/unit_tests && coverage report -m'
+  except:
+    - tags
+
+quality:integration-tests:
+  stage: quality
+  image: docker:19.03.0
+  services:
+    - docker:19.03.0-dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - CONTAINER_IMAGE_NAME=$(if [[ $CI_COMMIT_REF_NAME == "master" ]]; then echo $CONTAINER_IMAGE;else echo $CONTAINER_WIP_IMAGE;fi)
+    - docker run --env-file ./.local_dev.test.env $CONTAINER_IMAGE_NAME bash -c 'coverage run -m --source=app pytest -v tests/integration_tests && coverage report -m'
+  except:
+    - tags
+
+deploy-to-dev:
+  stage: deploy-to-dev
+  image: devth/helm
+  script:
+    - TAG_OR_SHA=$(if [[ $CI_COMMIT_TAG ]]; then echo $CI_COMMIT_TAG;else echo $CI_COMMIT_SHORT_SHA;fi)
+    - GKE_SERVICE_ACCOUNT=$HAPIMAG_CE_DEVELOPMENT_JSON
+    - cd k8s/helm
+    - projectName=hapimag-ce-development
+    - kubernetesClusterName=hapimag-ce-development
+    - init_helm
+    - helm -n backend upgrade --install tomorroe-challenge --set image.tag=$TAG_OR_SHA --set appVersion=$TAG_OR_SHA -f gke-dev.yaml tomorroe-challenge
+  only:
+    - master
+    - tags
+
+deploy-to-stage:
+  stage: deploy-to-stage
+  image: devth/helm
+  script:
+    - GKE_SERVICE_ACCOUNT=$HAPIMAG_CE_STAGING_JSON
+    - cd k8s/helm
+    - projectName=hapimag-ce-staging
+    - kubernetesClusterName=hapimag-ce-staging
+    - init_helm
+    - helm -n backend upgrade --install tomorroe-challenge --set image.tag=$CI_COMMIT_TAG --set appVersion=$CI_COMMIT_TAG -f gke-stage.yaml tomorroe-challenge
+  only:
+    - tags
+
+deploy-to-production:
+  stage: deploy-to-production
+  image: devth/helm
+  script:
+    - GKE_SERVICE_ACCOUNT=$HAPIMAG_CE_JSON
+    - cd k8s/helm
+    - projectName=hapimag-ce
+    - kubernetesClusterName=hapimag-ce
+    - init_helm
+    - helm -n backend upgrade --install tomorroe-challenge --set image.tag=$CI_COMMIT_TAG --set appVersion=$CI_COMMIT_TAG -f gke-production.yaml tomorroe-challenge
+  only:
+    - tags
+  when: manual
+
+
+
+
+.functions: &functions |
+  # Functions
+  function init_helm() {
+      mkdir -p /etc/deploy
+      gcloud auth activate-service-account --key-file $GKE_SERVICE_ACCOUNT --project=$projectName
+      gcloud container clusters get-credentials $kubernetesClusterName --zone europe-west6 --project $projectName
+  }
+
+before_script:
+  - *functions
